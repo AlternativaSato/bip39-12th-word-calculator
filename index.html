@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="es" id="htmlRoot">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora BIP39 / BIP39 Calculator - Alternativa Sato</title>
+    <!--
+        BIP39 12th-Word Calculator — Alternativa Sato
+        ------------------------------------------------
+        Propósito / Purpose:
+        Esta herramienta calcula la última palabra (checksum) de un mnemónico
+        BIP39 de 12 palabras a partir de las primeras 11 palabras más 7 bits
+        de entropía adicionales aportados por el usuario (p. ej. generados con
+        el Ritual de la Baraja: https://alternativasato.gitbook.io/alternativasato/ritual-de-la-baraja/el-ritual-de-la-baraja).
+
+        This tool computes the final (checksum) word of a 12-word BIP39
+        mnemonic from the first 11 words plus 7 extra bits of entropy supplied
+        by the user (e.g. generated with the "Ritual de la Baraja" card-based
+        entropy method).
+
+        Seguridad / Security:
+        - Todo el cálculo ocurre en el navegador (client-side). No se envía
+          ninguna palabra, semilla ni bit de entropía a ningún servidor.
+        - No hay llamadas de red, cookies, almacenamiento local ni analítica.
+        - El hash SHA-256 se calcula con la Web Crypto API nativa del
+          navegador (crypto.subtle), no con una librería de terceros.
+        - Se incluye la entropía en hexadecimal y un comando de verificación
+          externa (sha256sum) para que cualquiera pueda auditar el resultado
+          sin depender de este código.
+
+        - All computation happens in the browser (client-side). No word,
+          seed, or entropy bit is ever sent to a server.
+        - No network calls, cookies, local storage, or analytics.
+        - The SHA-256 hash is computed with the browser's native Web Crypto
+          API (crypto.subtle), not a third-party library.
+        - The hex-encoded entropy and an external verification command
+          (sha256sum) are shown so anyone can audit the result independently
+          of this code.
+
+        Licencia / License: CC BY-SA 4.0 (ver pie de página / see footer)
+        Repositorio / Repository: github.com/alternativasato/bip39-12th-word-calculator
+    -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+            position: relative;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .alternativa-logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #4CAF50, #8BC34A);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .header-text {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .alternativa-link {
+            color: #4CAF50;
+            background: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-block;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .alternativa-link:hover {
+            background: #4CAF50;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .lang-switch {
+            position: absolute;
+            top: 0;
+            right: 0;
+            display: flex;
+            gap: 6px;
+        }
+
+        .lang-btn {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.6);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .lang-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .lang-btn.active {
+            background: white;
+            color: #667eea;
+            border-color: white;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #4a5568;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        .textarea {
+            width: 100%;
+            height: 150px;
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+            margin-bottom: 15px;
+        }
+
+        .input-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .word-input {
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .bits-input {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result-section {
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .process-step {
+            background: #edf2f7;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #4a5568;
+        }
+
+        .bits-display {
+            font-family: 'Courier New', monospace;
+            background: #2d3748;
+            color: #68d391;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            overflow-x: auto;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        .hash-display {
+            font-family: 'Courier New', monospace;
+            background: #1a202c;
+            color: #fbb6ce;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            word-break: break-all;
+            font-size: 14px;
+        }
+
+        .binary-display {
+            font-family: 'Courier New', monospace;
+            background: #1a202c;
+            color: #90cdf4;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .final-word {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2d3748;
+            background: linear-gradient(135deg, #68d391, #4fd1c7);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #fc8181;
+        }
+
+        .success {
+            background: #c6f6d5;
+            color: #2d3748;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #68d391;
+        }
+
+        .info {
+            background: #bee3f8;
+            color: #2c5282;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #4299e1;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .step {
+            text-align: center;
+            flex: 1;
+            padding: 10px;
+            opacity: 0.5;
+            transition: all 0.3s ease;
+        }
+
+        .step.active {
+            opacity: 1;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .step-number {
+            background: #e2e8f0;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 5px;
+        }
+
+        .step.active .step-number {
+            background: #667eea;
+            color: white;
+        }
+
+        .words-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .words-table th {
+            background: #4a5568;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .words-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .words-table tr:hover {
+            background: #f7fafc;
+        }
+
+        .binary-cell {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #2d3748;
+        }
+
+        .decimal-cell {
+            text-align: center;
+            font-weight: bold;
+            color: #4a5568;
+        }
+
+        .word-cell {
+            font-weight: 500;
+        }
+
+        .checksum-highlight {
+            background: #fed7d7;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-weight: bold;
+            color: #c53030;
+        }
+
+        .hash-binary-line {
+            display: block;
+            margin: 2px 0;
+        }
+
+        .security-notice {
+            background: #fffbea;
+            color: #7c5e10;
+            border: 2px solid #f0c14b;
+            border-left: 6px solid #d97706;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .security-notice a {
+            color: #7c5e10;
+            font-weight: 700;
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .input-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .lang-switch {
+                position: static;
+                justify-content: center;
+                margin-bottom: 15px;
+            }
+
+            .step-indicator {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .words-table {
+                font-size: 14px;
+            }
+
+            .words-table th,
+            .words-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="lang-switch">
+                <button class="lang-btn active" id="langEsBtn" onclick="setLanguage('es')">ES</button>
+                <button class="lang-btn" id="langEnBtn" onclick="setLanguage('en')">EN</button>
+            </div>
+            <div class="header-content">
+                <div class="logo-container">
+                    <div class="alternativa-logo">AS</div>
+                    <div>
+                        <div style="font-weight: bold; color: white;">Alternativa Sato</div>
+                        <div style="font-size: 0.9rem; opacity: 0.8;" data-i18n="headerTagline">Educación Bitcoin</div>
+                    </div>
+                </div>
+                <div class="header-text">
+                    <h1 data-i18n="title">🔐 Calculadora BIP39 Multiidioma</h1>
+                    <p data-i18n="subtitle">Herramienta educativa para calcular la palabra final de un mnemónico de 12 palabras</p>
+                    <a href="https://alternativasato.gitbook.io/alternativasato"
+                       target="_blank" rel="noopener"
+                       class="alternativa-link"
+                       data-i18n="visitLink">🌐 Visita Alternativa Sato</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Notice -->
+        <div class="security-notice" data-i18n-html="securityNotice">
+            <strong>⚠️ Antes de continuar:</strong> Esta calculadora es educativa. No confíes en nuestra palabra — evalúa la seguridad por tu cuenta antes de usarla con fondos reales. Nunca la uses en un dispositivo conectado a internet para una semilla real. Lee las <a href="SECURITY.md" target="_blank" rel="noopener">Advertencias de Seguridad</a> completas.
+        </div>
+
+        <!-- Step Indicator -->
+        <div class="step-indicator">
+            <div class="step active" id="step1">
+                <div class="step-number">1</div>
+                <div data-i18n="stepWordlist">Lista de Palabras</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-number">2</div>
+                <div data-i18n="step11words">11 Palabras</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-number">3</div>
+                <div data-i18n="step7bits">7 Bits</div>
+            </div>
+            <div class="step" id="step4">
+                <div class="step-number">4</div>
+                <div data-i18n="stepResult">Resultado</div>
+            </div>
+        </div>
+
+        <!-- Step 1: Word List -->
+        <div class="card" id="step1Card">
+            <h2 data-i18n="step1Title">📝 Paso 1: Ingresa la lista de 2048 palabras BIP39</h2>
+            <div class="info" data-i18n-html="step1Info">
+                <strong>Formato requerido:</strong> 2048 palabras, una por línea, en el orden oficial BIP39
+            </div>
+            <textarea class="textarea" id="wordlistInput"></textarea>
+            <button class="btn" onclick="loadWordlist()" data-i18n="loadListBtn">Cargar Lista de Palabras</button>
+            <div class="info" data-i18n-html="step1Resource">
+                <strong>Recurso educativo:</strong> Encuentra listas BIP39 en múltiples idiomas en los recursos de Alternativa Sato
+            </div>
+        </div>
+
+        <!-- Step 2: 11 Words -->
+        <div class="card" id="step2Card" style="display: none;">
+            <h2 data-i18n="step2Title">📝 Paso 2: Ingresa las primeras 11 palabras</h2>
+            <div class="input-grid" id="wordInputs">
+                <!-- Inputs generados dinámicamente / dynamically generated -->
+            </div>
+            <button class="btn" onclick="processWords()" data-i18n="continueBtn">Continuar a Bits</button>
+            <button class="btn" onclick="backToStep(1)" style="background: #a0aec0;" data-i18n="backBtn">Volver</button>
+        </div>
+
+        <!-- Step 3: 7 Bits -->
+        <div class="card" id="step3Card" style="display: none;">
+            <h2 data-i18n="step3Title">🔢 Paso 3: Palabras ingresadas y bits faltantes</h2>
+
+            <div class="process-step">
+                <h3 data-i18n="wordsBreakdown">Desglose de las 11 palabras:</h3>
+                <table class="words-table" id="wordsTable">
+                    <thead>
+                        <tr>
+                            <th data-i18n="thNum">#</th>
+                            <th data-i18n="thWord">Palabra</th>
+                            <th data-i18n="thDecimal">Decimal</th>
+                            <th data-i18n="thBinary">Binario (11 bits)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="wordsTableBody">
+                        <!-- Filas generadas dinámicamente / dynamically generated -->
+                    </tbody>
+                </table>
+                <div class="success" id="bitsSummary"></div>
+            </div>
+
+            <div class="info" data-i18n-html="missing7bitsInfo">
+                <strong>Faltan 7 bits de entropía</strong><br>
+                Ingresa exactamente 7 caracteres (solo 1s y 0s)
+            </div>
+            <input type="text" id="bitsInput" class="word-input bits-input" maxlength="7">
+
+            <button class="btn" onclick="calculateFinalWord()" data-i18n="calcBtn">Calcular Palabra Final</button>
+            <button class="btn" onclick="backToStep(2)" style="background: #a0aec0;" data-i18n="backBtn">Volver</button>
+        </div>
+
+        <!-- Step 4: Results -->
+        <div class="card" id="step4Card" style="display: none;">
+            <h2 data-i18n="step4Title">🎯 Resultado del Cálculo</h2>
+            <div id="processSteps">
+                <!-- Proceso detallado / detailed process -->
+            </div>
+            <div class="info" data-i18n-html="step4Resource">
+                <strong>Recurso educativo:</strong> Para más herramientas y guías sobre Bitcoin, visita
+                <a href="https://alternativasato.gitbook.io/alternativasato" target="_blank" rel="noopener" style="color: #4CAF50; font-weight: bold;">
+                    Alternativa Sato
+                </a>
+            </div>
+            <button class="btn" onclick="resetTool()" data-i18n="newCalcBtn">Nuevo Cálculo</button>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e2e8f0;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap;">
+            <div style="background: #4CAF50; color: white; padding: 10px 20px; border-radius: 20px;">
+                <strong>Alternativa Sato</strong> · <span data-i18n="footerTagline">Educación Bitcoin</span>
+            </div>
+            <div>
+                <a rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/">
+                    <img alt="Creative Commons License"
+                         style="border-width:0"
+                         src="https://i.creativecommons.org/l/by-sa/4.0/88x31.png">
+                </a>
+            </div>
+        </div>
+        <p style="margin-top: 10px; font-size: 12px; color: #718096;" data-i18n="footerText">
+            Esta herramienta es de código abierto y educativa.
+            Puedes usar, modificar y distribuir bajo los términos de la licencia CC BY-SA 4.0.
+        </p>
+    </div>
+
+    <script>
+        // ==========================================================
+        // i18n — translation dictionary (ES / EN)
+        // ==========================================================
+        const i18n = {
+            es: {
+                headerTagline: 'Educación Bitcoin',
+                footerTagline: 'Educación Bitcoin',
+                title: '🔐 Calculadora BIP39 Multiidioma',
+                subtitle: 'Herramienta educativa para calcular la palabra final de un mnemónico de 12 palabras',
+                visitLink: '🌐 Visita Alternativa Sato',
+                securityNotice: '<strong>⚠️ Antes de continuar:</strong> Esta calculadora es educativa. No confíes en nuestra palabra — evalúa la seguridad por tu cuenta antes de usarla con fondos reales. Nunca la uses en un dispositivo conectado a internet para una semilla real. Lee las <a href="SECURITY.md" target="_blank" rel="noopener">Advertencias de Seguridad</a> completas.',
+                stepWordlist: 'Lista de Palabras',
+                step11words: '11 Palabras',
+                step7bits: '7 Bits',
+                stepResult: 'Resultado',
+                step1Title: '📝 Paso 1: Ingresa la lista de 2048 palabras BIP39',
+                step1Info: '<strong>Formato requerido:</strong> 2048 palabras, una por línea, en el orden oficial BIP39',
+                wordlistPlaceholder: 'Pega aquí las 2048 palabras BIP39...\nEjemplo:\nabandon\nability\nable\nabout\n...\n(2048 palabras total)',
+                loadListBtn: 'Cargar Lista de Palabras',
+                step1Resource: '<strong>Recurso educativo:</strong> Encuentra listas BIP39 en múltiples idiomas en los recursos de Alternativa Sato',
+                step2Title: '📝 Paso 2: Ingresa las primeras 11 palabras',
+                continueBtn: 'Continuar a Bits',
+                backBtn: 'Volver',
+                wordLabel: 'Palabra',
+                step3Title: '🔢 Paso 3: Palabras ingresadas y bits faltantes',
+                wordsBreakdown: 'Desglose de las 11 palabras:',
+                thNum: '#',
+                thWord: 'Palabra',
+                thDecimal: 'Decimal',
+                thBinary: 'Binario (11 bits)',
+                bitsSummary: (n) => `Total: ${n} bits (11 palabras × 11 bits cada una)`,
+                missing7bitsInfo: '<strong>Faltan 7 bits de entropía</strong><br>Ingresa exactamente 7 caracteres (solo 1s y 0s)',
+                bitsPlaceholder: 'ej: 1011001',
+                calcBtn: 'Calcular Palabra Final',
+                step4Title: '🎯 Resultado del Cálculo',
+                step4Resource: '<strong>Recurso educativo:</strong> Para más herramientas y guías sobre Bitcoin, visita <a href="https://alternativasato.gitbook.io/alternativasato" target="_blank" rel="noopener" style="color: #4CAF50; font-weight: bold;">Alternativa Sato</a>',
+                newCalcBtn: 'Nuevo Cálculo',
+                footerText: 'Esta herramienta es de código abierto y educativa. Puedes usar, modificar y distribuir bajo los términos de la licencia CC BY-SA 4.0.',
+                // errores / mensajes dinámicos
+                errExpectedWords: (n) => `Error: Se esperaban 2048 palabras, pero se encontraron ${n}`,
+                errDuplicates: 'Error: Se encontraron palabras duplicadas en la lista. Se esperaban 2048 palabras únicas.',
+                successListLoaded: (n) => `✅ Lista cargada exitosamente: ${n} palabras únicas`,
+                errWordNotInList: (w) => `"${w}" no está en la lista de palabras cargada`,
+                errCompleteWords: 'Por favor completa las 11 palabras',
+                errBits7: 'Por favor ingresa exactamente 7 bits (solo 1s y 0s). Ejemplo: 1011001',
+                errFinalIndexRange: 'Error: Índice de palabra final fuera de rango',
+                errCalcError: (msg) => `Error en el cálculo: ${msg}`,
+                // pasos del proceso (step 4)
+                procStep1Title: '1. Palabras ingresadas (121 bits)',
+                procStep1Total: 'Total: 121 bits de las 11 palabras',
+                procStep2Title: '2. 7 bits de entropía ingresados',
+                procStep2Success: '7 bits de entropía adicional',
+                procStep3Title: '3. Entropía completa (128 bits)',
+                procStep3Success: '121 bits (palabras) + 7 bits (usuario) = 128 bits de entropía',
+                procStep4Title: '4. Entropía en hexadecimal (para verificación externa)',
+                procStep4Info1: '<strong>Para verificación independiente:</strong><br>Puedes copiar este valor hexadecimal y calcular SHA256 con cualquier herramienta externa. Los primeros 4 bits del hash deben coincidir con el checksum calculado en el siguiente paso.',
+                procStep4Label: '<strong>Entropía completa (128 bits = 16 bytes):</strong>',
+                procStep4VerifyLabel: '<strong>Ejemplo de verificación en Linux/macOS:</strong><br>',
+                procStep5Title: '5. Cálculo SHA256 de la entropía',
+                procStep5InputLabel: '<strong>Input (entropía 128 bits):</strong>',
+                procStep5OutputHexLabel: '<strong>Output SHA256 (hexadecimal):</strong>',
+                procStep5OutputBinLabel: '<strong>Output SHA256 (binario):</strong>',
+                procStep5ChecksumLabel: '<strong>Primeros 4 bits del hash (checksum):</strong>',
+                procStep5ChecksumNote: '← Estos son los primeros 4 bits del hash SHA256',
+                procStep5Info: 'Los primeros 4 bits del hash SHA256 se usan como checksum para validar el mnemónico',
+                procStep6Title: '6. Palabra final calculada',
+                procStep6BitsLabel: (bits) => `Bits para palabra 12: ${bits}`,
+                procStep6IndexLine: (bits, idx) => `${bits} → Índice ${idx}`,
+                procStep6Success: '¡Mnemónico BIP39 completo y válido!',
+                procStep6SummaryLabel: '<strong>Resumen:</strong><br>',
+                procStep6SummaryWords: '• 11 palabras ingresadas: 121 bits<br>',
+                procStep6SummaryBits: (b) => `• 7 bits de entropía: ${b}<br>`,
+                procStep6SummaryChecksum: (c) => `• 4 bits checksum: ${c}<br>`,
+                procStep6SummaryFinal: (bits, word) => `• Total palabra 12: ${bits} → "${word}"`,
+            },
+            en: {
+                headerTagline: 'Bitcoin Education',
+                footerTagline: 'Bitcoin Education',
+                title: '🔐 Multi-Language BIP39 Calculator',
+                subtitle: 'Educational tool to calculate the final word of a 12-word mnemonic',
+                visitLink: '🌐 Visit Alternativa Sato',
+                securityNotice: '<strong>⚠️ Before you continue:</strong> This calculator is educational. Don\'t take our word for it — evaluate the security yourself before using it with real funds. Never use it on an internet-connected device for a real seed. Read the full <a href="SECURITY.md" target="_blank" rel="noopener">Security Warnings</a>.',
+                stepWordlist: 'Word List',
+                step11words: '11 Words',
+                step7bits: '7 Bits',
+                stepResult: 'Result',
+                step1Title: '📝 Step 1: Enter the 2048 BIP39 word list',
+                step1Info: '<strong>Required format:</strong> 2048 words, one per line, in the official BIP39 order',
+                wordlistPlaceholder: 'Paste the 2048 BIP39 words here...\nExample:\nabandon\nability\nable\nabout\n...\n(2048 words total)',
+                loadListBtn: 'Load Word List',
+                step1Resource: '<strong>Educational resource:</strong> Find BIP39 lists in multiple languages on Alternativa Sato\'s resources',
+                step2Title: '📝 Step 2: Enter the first 11 words',
+                continueBtn: 'Continue to Bits',
+                backBtn: 'Back',
+                wordLabel: 'Word',
+                step3Title: '🔢 Step 3: Words entered and missing bits',
+                wordsBreakdown: 'Breakdown of the 11 words:',
+                thNum: '#',
+                thWord: 'Word',
+                thDecimal: 'Decimal',
+                thBinary: 'Binary (11 bits)',
+                bitsSummary: (n) => `Total: ${n} bits (11 words × 11 bits each)`,
+                missing7bitsInfo: '<strong>Missing 7 bits of entropy</strong><br>Enter exactly 7 characters (only 1s and 0s)',
+                bitsPlaceholder: 'e.g., 1011001',
+                calcBtn: 'Calculate Final Word',
+                step4Title: '🎯 Calculation Result',
+                step4Resource: '<strong>Educational resource:</strong> For more tools and guides on Bitcoin, visit <a href="https://alternativasato.gitbook.io/alternativasato" target="_blank" rel="noopener" style="color: #4CAF50; font-weight: bold;">Alternativa Sato</a>',
+                newCalcBtn: 'New Calculation',
+                footerText: 'This tool is open-source and educational. You may use, modify, and distribute under the terms of the CC BY-SA 4.0 license.',
+                errExpectedWords: (n) => `Error: Expected 2048 words, but found ${n}`,
+                errDuplicates: 'Error: Duplicate words found in the list. Expected 2048 unique words.',
+                successListLoaded: (n) => `✅ List loaded successfully: ${n} unique words`,
+                errWordNotInList: (w) => `"${w}" is not in the loaded word list`,
+                errCompleteWords: 'Please complete all 11 words',
+                errBits7: 'Please enter exactly 7 bits (only 1s and 0s). Example: 1011001',
+                errFinalIndexRange: 'Error: Final word index out of range',
+                errCalcError: (msg) => `Calculation error: ${msg}`,
+                procStep1Title: '1. Words entered (121 bits)',
+                procStep1Total: 'Total: 121 bits from the 11 words',
+                procStep2Title: '2. 7 bits of entropy entered',
+                procStep2Success: '7 bits of additional entropy',
+                procStep3Title: '3. Complete entropy (128 bits)',
+                procStep3Success: '121 bits (words) + 7 bits (user) = 128 bits of entropy',
+                procStep4Title: '4. Entropy in hexadecimal (for external verification)',
+                procStep4Info1: '<strong>For independent verification:</strong><br>You can copy this hexadecimal value and calculate SHA256 with any external tool. The first 4 bits of the hash must match the checksum calculated in the next step.',
+                procStep4Label: '<strong>Complete entropy (128 bits = 16 bytes):</strong>',
+                procStep4VerifyLabel: '<strong>Verification example on Linux/macOS:</strong><br>',
+                procStep5Title: '5. SHA256 calculation of entropy',
+                procStep5InputLabel: '<strong>Input (128-bit entropy):</strong>',
+                procStep5OutputHexLabel: '<strong>SHA256 output (hexadecimal):</strong>',
+                procStep5OutputBinLabel: '<strong>SHA256 output (binary):</strong>',
+                procStep5ChecksumLabel: '<strong>First 4 bits of the hash (checksum):</strong>',
+                procStep5ChecksumNote: '← These are the first 4 bits of the SHA256 hash',
+                procStep5Info: 'The first 4 bits of the SHA256 hash are used as the checksum to validate the mnemonic',
+                procStep6Title: '6. Final word calculated',
+                procStep6BitsLabel: (bits) => `Bits for word 12: ${bits}`,
+                procStep6IndexLine: (bits, idx) => `${bits} → Index ${idx}`,
+                procStep6Success: '✅ Complete and valid BIP39 mnemonic!',
+                procStep6SummaryLabel: '<strong>Summary:</strong><br>',
+                procStep6SummaryWords: '• 11 words entered: 121 bits<br>',
+                procStep6SummaryBits: (b) => `• 7 bits of entropy: ${b}<br>`,
+                procStep6SummaryChecksum: (c) => `• 4 bits checksum: ${c}<br>`,
+                procStep6SummaryFinal: (bits, word) => `• Word 12 total: ${bits} → "${word}"`,
+            }
+        };
+
+        let currentLang = 'es';
+
+        function t(key, ...args) {
+            const val = i18n[currentLang][key];
+            return typeof val === 'function' ? val(...args) : val;
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.getElementById('htmlRoot').setAttribute('lang', lang);
+            document.getElementById('langEsBtn').classList.toggle('active', lang === 'es');
+            document.getElementById('langEnBtn').classList.toggle('active', lang === 'en');
+            applyStaticTranslations();
+
+            // Re-render dynamic bits that already have data, without wiping user input
+            if (currentWordlist.length) {
+                document.getElementById('wordlistInput').placeholder = t('wordlistPlaceholder');
+            } else {
+                document.getElementById('wordlistInput').placeholder = t('wordlistPlaceholder');
+            }
+            document.getElementById('bitsInput').placeholder = t('bitsPlaceholder');
+            refreshWordInputLabels();
+            if (currentWords.length) {
+                updateWordsTable();
+            }
+            // Nota: el detalle del Paso 4 (resultado ya calculado) conserva el
+            // idioma en el que fue generado; los botones y textos fijos sí se
+            // traducen. / Note: already-calculated Step 4 details keep the
+            // language they were generated in; surrounding buttons/labels do update.
+        }
+
+        function applyStaticTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                el.textContent = t(el.dataset.i18n);
+            });
+            document.querySelectorAll('[data-i18n-html]').forEach(el => {
+                el.innerHTML = t(el.dataset.i18nHtml);
+            });
+        }
+
+        let currentWordlist = [];
+        let currentWordIndices = [];
+        let currentBitString = '';
+        let currentWords = [];
+
+        // Paso 1 / Step 1: Cargar lista de palabras / Load word list
+        function loadWordlist() {
+            const wordlistText = document.getElementById('wordlistInput').value.trim();
+            const words = wordlistText.split('\n').map(w => w.trim()).filter(w => w);
+
+            if (words.length !== 2048) {
+                showError(t('errExpectedWords', words.length));
+                return;
+            }
+
+            const uniqueWords = new Set(words);
+            if (uniqueWords.size !== 2048) {
+                showError(t('errDuplicates'));
+                return;
+            }
+
+            currentWordlist = words;
+            showStep(2);
+            generateWordInputs();
+            showMessage('success', t('successListLoaded', words.length));
+        }
+
+        // Generar inputs para 11 palabras / Generate inputs for 11 words
+        function generateWordInputs() {
+            const container = document.getElementById('wordInputs');
+            container.innerHTML = '';
+
+            for (let i = 1; i <= 11; i++) {
+                const inputGroup = document.createElement('div');
+                inputGroup.dataset.wordIndex = i;
+                inputGroup.innerHTML = `
+                    <label class="word-input-label">${t('wordLabel')} ${i}:</label>
+                    <input type="text" class="word-input" id="word${i}" placeholder="${t('wordLabel')} ${i}">
+                `;
+                container.appendChild(inputGroup);
+            }
+        }
+
+        // Actualiza solo las etiquetas sin borrar lo escrito / Update labels only, keep typed values
+        function refreshWordInputLabels() {
+            const container = document.getElementById('wordInputs');
+            if (!container || !container.children.length) return;
+            for (let i = 1; i <= 11; i++) {
+                const group = container.querySelector(`[data-word-index="${i}"]`);
+                if (!group) continue;
+                const label = group.querySelector('.word-input-label');
+                const input = group.querySelector('input');
+                if (label) label.textContent = `${t('wordLabel')} ${i}:`;
+                if (input) input.placeholder = `${t('wordLabel')} ${i}`;
+            }
+        }
+
+        // Paso 2 / Step 2: Procesar las 11 palabras / Process the 11 words
+        function processWords() {
+            const words = [];
+            let valid = true;
+
+            for (let i = 1; i <= 11; i++) {
+                const word = document.getElementById(`word${i}`).value.toLowerCase().trim();
+                if (word) {
+                    const index = currentWordlist.indexOf(word);
+                    if (index !== -1) {
+                        words.push({
+                            word,
+                            index,
+                            binary: index.toString(2).padStart(11, '0')
+                        });
+                    } else {
+                        showError(t('errWordNotInList', word));
+                        valid = false;
+                        break;
+                    }
+                } else {
+                    showError(t('errCompleteWords'));
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (!valid) return;
+
+            currentWords = words;
+            currentWordIndices = words.map(w => w.index);
+            currentBitString = words.map(w => w.binary).join('');
+
+            updateWordsTable();
+            showStep(3);
+        }
+
+        // Actualizar tabla de palabras / Update words table
+        function updateWordsTable() {
+            const tableBody = document.getElementById('wordsTableBody');
+            tableBody.innerHTML = '';
+
+            let totalBits = 0;
+
+            currentWords.forEach((item, i) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${i + 1}</td>
+                    <td class="word-cell">${item.word}</td>
+                    <td class="decimal-cell">${item.index}</td>
+                    <td class="binary-cell">${formatBinaryWithSpaces(item.binary)}</td>
+                `;
+                tableBody.appendChild(row);
+                totalBits += 11;
+            });
+
+            document.getElementById('bitsSummary').textContent = t('bitsSummary', totalBits);
+        }
+
+        // Paso 3 / Step 3: Calcular palabra final / Calculate final word
+        async function calculateFinalWord() {
+            const bitsInput = document.getElementById('bitsInput').value.trim();
+
+            if (!/^[01]{7}$/.test(bitsInput)) {
+                showError(t('errBits7'));
+                return;
+            }
+
+            showStep(4);
+            const processSteps = document.getElementById('processSteps');
+            processSteps.innerHTML = '';
+
+            try {
+                const tableHTML = `
+                    <table class="words-table">
+                        <thead>
+                            <tr>
+                                <th>${t('thNum')}</th>
+                                <th>${t('thWord')}</th>
+                                <th>${t('thDecimal')}</th>
+                                <th>${t('thBinary')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${currentWords.map((item, i) => `
+                                <tr>
+                                    <td>${i + 1}</td>
+                                    <td class="word-cell">${item.word}</td>
+                                    <td class="decimal-cell">${item.index}</td>
+                                    <td class="binary-cell">${formatBinaryWithSpaces(item.binary)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <div class="success">${t('procStep1Total')}</div>
+                `;
+
+                addProcessStep(processSteps, t('procStep1Title'), tableHTML);
+
+                addProcessStep(processSteps, t('procStep2Title'),
+                    `<div class="bits-display">${bitsInput}</div>
+                     <div class="success">${t('procStep2Success')}</div>`);
+
+                const fullEntropyBits = currentBitString + bitsInput;
+
+                addProcessStep(processSteps, t('procStep3Title'),
+                    `<div class="bits-display">${formatBitString(fullEntropyBits)}</div>
+                     <div class="success">${t('procStep3Success')}</div>`);
+
+                const fullEntropyHex = binaryToHex(fullEntropyBits);
+
+                addProcessStep(processSteps, t('procStep4Title'),
+                    `<div class="info">${t('procStep4Info1')}</div>
+
+                    ${t('procStep4Label')}
+                    <div class="hash-display">${fullEntropyHex}</div>
+
+                    <div class="info" style="margin-top: 10px;">
+                        ${t('procStep4VerifyLabel')}
+                        <code style="background: #2d3748; padding: 5px; border-radius: 4px; display: inline-block; margin-top: 5px;">
+                            echo -n "${fullEntropyHex}" | xxd -r -p | sha256sum
+                        </code>
+                    </div>`);
+
+                const checksum = await calculateSHA256(fullEntropyBits);
+
+                const hashBinary = hexToBinary(checksum.hashHex);
+
+                addProcessStep(processSteps, t('procStep5Title'),
+                    `${t('procStep5InputLabel')}
+                     <div class="bits-display">${formatBitString(fullEntropyBits)}</div>
+
+                     ${t('procStep5OutputHexLabel')}
+                     <div class="hash-display">${checksum.hashHex}</div>
+
+                     ${t('procStep5OutputBinLabel')}
+                     <div class="binary-display">
+                         ${formatHashBinary(hashBinary)}
+                     </div>
+
+                     ${t('procStep5ChecksumLabel')}
+                     <div class="bits-display">
+                         <span class="checksum-highlight">${checksum.first4Bits}</span>
+                         ${t('procStep5ChecksumNote')}
+                     </div>
+                     <div class="info">${t('procStep5Info')}</div>`);
+
+                const finalWordBits = bitsInput + checksum.first4Bits;
+                const finalIndex = parseInt(finalWordBits, 2);
+
+                if (finalIndex >= 0 && finalIndex < 2048) {
+                    const finalWord = currentWordlist[finalIndex];
+
+                    addProcessStep(processSteps, t('procStep6Title'),
+                        `<div class="bits-display">${t('procStep6BitsLabel', finalWordBits)}</div>
+                         <div class="success">${t('procStep6IndexLine', finalWordBits, finalIndex)}</div>
+                         <div class="final-word">${finalWord}</div>
+                         <div class="success">${t('procStep6Success')}</div>
+                         <div class="info">
+                             ${t('procStep6SummaryLabel')}
+                             ${t('procStep6SummaryWords')}
+                             ${t('procStep6SummaryBits', bitsInput)}
+                             ${t('procStep6SummaryChecksum', checksum.first4Bits)}
+                             ${t('procStep6SummaryFinal', finalWordBits, finalWord)}
+                         </div>`);
+                } else {
+                    showError(t('errFinalIndexRange'));
+                }
+
+            } catch (error) {
+                showError(t('errCalcError', error.message));
+            }
+        }
+
+        // Cálculo SHA-256 (Web Crypto API nativa, sin librerías externas)
+        // SHA-256 calculation (native Web Crypto API, no external libraries)
+        async function calculateSHA256(bitString) {
+            const bytes = [];
+            for (let i = 0; i < bitString.length; i += 8) {
+                const byte = bitString.substr(i, 8);
+                bytes.push(parseInt(byte, 2));
+            }
+
+            const byteArray = new Uint8Array(bytes);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', byteArray);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+            const firstByte = hashArray[0];
+            const first4Bits = (firstByte >> 4).toString(2).padStart(4, '0');
+
+            return { hashHex, first4Bits };
+        }
+
+        // Funciones auxiliares / Helper functions
+        function hexToBinary(hexString) {
+            return hexString.split('').map(hex =>
+                parseInt(hex, 16).toString(2).padStart(4, '0')
+            ).join('');
+        }
+
+        function formatHashBinary(binary) {
+            let result = '';
+            for (let i = 0; i < binary.length; i += 32) {
+                const line = binary.substr(i, 32);
+                result += `<span class="hash-binary-line">${formatBinaryWithSpaces(line, 8)}</span>`;
+            }
+            return result;
+        }
+
+        function binaryToHex(binaryString) {
+            let hex = '';
+            for (let i = 0; i < binaryString.length; i += 8) {
+                const byte = binaryString.substr(i, 8);
+                hex += parseInt(byte, 2).toString(16).padStart(2, '0');
+            }
+            return hex.toUpperCase();
+        }
+
+        function formatBinaryWithSpaces(binary, groupSize = 4) {
+            return binary.match(new RegExp(`.{1,${groupSize}}`, 'g')).join(' ');
+        }
+
+        function showStep(stepNumber) {
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`step${i}Card`).style.display = 'none';
+                document.getElementById(`step${i}`).classList.remove('active');
+            }
+
+            document.getElementById(`step${stepNumber}Card`).style.display = 'block';
+            document.getElementById(`step${stepNumber}`).classList.add('active');
+        }
+
+        function backToStep(stepNumber) {
+            showStep(stepNumber);
+        }
+
+        function resetTool() {
+            currentWordlist = [];
+            currentWordIndices = [];
+            currentBitString = '';
+            currentWords = [];
+            document.getElementById('wordlistInput').value = '';
+            document.getElementById('bitsInput').value = '';
+            showStep(1);
+        }
+
+        function addProcessStep(container, title, content) {
+            const step = document.createElement('div');
+            step.className = 'process-step';
+            step.innerHTML = `<h3>${title}</h3>${content}`;
+            container.appendChild(step);
+        }
+
+        function formatBitString(bits) {
+            return bits.match(/.{1,8}/g).join(' ');
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            errorDiv.style.margin = '10px 0';
+
+            const currentCard = document.querySelector('.card[style=""]') || document.querySelector('.card:not([style*="none"])');
+            if (currentCard) {
+                currentCard.insertBefore(errorDiv, currentCard.firstChild);
+
+                setTimeout(() => {
+                    if (errorDiv.parentNode) {
+                        errorDiv.parentNode.removeChild(errorDiv);
+                    }
+                }, 5000);
+            } else {
+                alert(message);
+            }
+        }
+
+        function showMessage(type, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type === 'success' ? 'success' : 'info';
+            messageDiv.textContent = message;
+            messageDiv.style.margin = '10px 0';
+
+            const currentCard = document.querySelector('.card[style=""]') || document.querySelector('.card:not([style*="none"])');
+            if (currentCard) {
+                currentCard.insertBefore(messageDiv, currentCard.firstChild);
+
+                setTimeout(() => {
+                    if (messageDiv.parentNode) {
+                        messageDiv.parentNode.removeChild(messageDiv);
+                    }
+                }, 5000);
+            }
+        }
+
+        // Inicializar / Initialize
+        applyStaticTranslations();
+        document.getElementById('wordlistInput').placeholder = t('wordlistPlaceholder');
+        document.getElementById('bitsInput').placeholder = t('bitsPlaceholder');
+        showStep(1);
+    </script>
+</body>
+</html>
