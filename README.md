@@ -1,0 +1,1 @@
+# bip39-12th-word-calculator
